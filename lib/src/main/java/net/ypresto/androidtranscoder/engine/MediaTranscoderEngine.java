@@ -160,7 +160,12 @@ public class MediaTranscoderEngine {
             @Override
             public void onDetermineOutputFormat() {
                 MediaFormatValidator.validateVideoOutputFormat(mVideoTrackTranscoder.getDeterminedFormat());
-                MediaFormatValidator.validateAudioOutputFormat(mAudioTrackTranscoder.getDeterminedFormat());
+
+                // If there is an audio track, validate the output is correct.
+                MediaFormat audioFormat = mAudioTrackTranscoder.getDeterminedFormat();
+                if (audioFormat != null) {
+                    MediaFormatValidator.validateAudioOutputFormat(audioFormat);
+                }
             }
         });
 
@@ -170,17 +175,21 @@ public class MediaTranscoderEngine {
             mVideoTrackTranscoder = new VideoTrackTranscoder(mExtractor, trackResult.mVideoTrackIndex, videoOutputFormat, queuedMuxer);
         }
         mVideoTrackTranscoder.setup();
+        mExtractor.selectTrack(trackResult.mVideoTrackIndex);
+
         if (audioOutputFormat == null) {
             mAudioTrackTranscoder = new PassThroughTrackTranscoder(mExtractor, trackResult.mAudioTrackIndex, queuedMuxer, QueuedMuxer.SampleType.AUDIO);
         } else {
             mAudioTrackTranscoder = new AudioTrackTranscoder(mExtractor, trackResult.mAudioTrackIndex, audioOutputFormat, queuedMuxer);
         }
+
+        if (trackResult.mAudioTrackIndex >= 0) {
+            mExtractor.selectTrack(trackResult.mAudioTrackIndex);
+        }
         mAudioTrackTranscoder.setup();
-        mExtractor.selectTrack(trackResult.mVideoTrackIndex);
-        mExtractor.selectTrack(trackResult.mAudioTrackIndex);
     }
 
-    private void runPipelines() throws InterruptedException {
+    private void runPipelines() {
         long loopCount = 0;
         if (mDurationUs <= 0) {
             double progress = PROGRESS_UNKNOWN;
@@ -199,7 +208,11 @@ public class MediaTranscoderEngine {
                 if (mProgressCallback != null) mProgressCallback.onProgress(progress);
             }
             if (!stepped) {
-                Thread.sleep(SLEEP_TO_WAIT_TRACK_TRANSCODERS);
+                try {
+                    Thread.sleep(SLEEP_TO_WAIT_TRACK_TRANSCODERS);
+                } catch (InterruptedException e) {
+                    // nothing to do
+                }
             }
         }
     }
